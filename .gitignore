@@ -9,9 +9,9 @@ wheels/
 # Virtual environments
 .venv
 
-*.ico
 *.sqlite3
-*.png
 *.zip
 *.csv
 *.exe
+htmlcov/
+.coverage

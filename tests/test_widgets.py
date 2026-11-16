@@ -1,6 +1,12 @@
 from unittest.mock import MagicMock, patch
 
-from widgets import AutocompleteCombobox, DataTable, DateTimePicker, EditableTabBar
+from widgets import (
+    AutocompleteCombobox,
+    DataTable,
+    DateTimePicker,
+    EditableTabBar,
+    _EditTabDialog,
+)
 
 
 def test_autocomplete_combobox_filtering_navigation_and_focus_out(tk_root):
@@ -10,25 +16,30 @@ def test_autocomplete_combobox_filtering_navigation_and_focus_out(tk_root):
     cb.set_completion_list(["SUCO DE LARANJA", "SUCO DE UVA", "CAFÉ"])
     tk_root.update_idletasks()
 
-    # Substring filtering
-    cb.focus_set()
-    cb.set("uva")
-    cb._on_text_changed()
-    assert cb._popup is not None and cb._listbox.size() == 1
-    assert cb._listbox.get(0) == "SUCO DE UVA"
+    try:
+        # Substring filtering while entry holds focus
+        with patch.object(cb, "focus_get", return_value=cb):
+            cb.set("uva")
+            cb._on_text_changed()
 
-    # Keyboard accept commits value and closes popup
-    cb._accept()
-    assert cb.get() == "SUCO DE UVA"
-    assert cb._popup is None
-    assert selected[-1] == "SUCO DE UVA"
+        assert cb._popup is not None and cb._listbox.size() == 1
+        assert cb._listbox.get(0) == "SUCO DE UVA"
 
-    # Focus out with invalid text clears input and notifies callback
-    cb.set("INEXISTENTE")
-    with patch.object(cb, "focus_get", return_value=tk_root):
-        cb._on_focus_out()
-    assert cb.get() == ""
-    assert selected[-1] == ""
+        # Keyboard accept commits value and closes popup
+        cb._accept()
+        assert cb.get() == "SUCO DE UVA"
+        assert cb._popup is None
+        assert selected[-1] == "SUCO DE UVA"
+
+        # Focus out with invalid text clears input and notifies callback
+        cb.set("INEXISTENTE")
+        with patch.object(cb, "focus_get", return_value=tk_root):
+            cb._on_focus_out()
+        assert cb.get() == ""
+        assert selected[-1] == ""
+    finally:
+        cb._close()
+        cb.destroy()
 
 
 def test_datetime_picker_month_rollover_and_selection(tk_root):
@@ -100,3 +111,56 @@ def test_editable_tab_bar_selection_and_creation(tk_root):
     with patch("widgets.simpledialog.askstring", return_value="CAT C"):
         bar._prompt_create()
     on_create.assert_called_once_with("CAT C")
+
+
+def test_edit_tab_dialog_rename_blank_guard_and_delete(tk_root):
+    on_rename = MagicMock()
+    on_delete = MagicMock()
+
+    bar = EditableTabBar(
+        tk_root,
+        on_select=MagicMock(),
+        on_create=MagicMock(),
+        on_rename=on_rename,
+        on_delete=on_delete,
+        item_noun="Catálogo",
+    )
+    bar.set_items([(1, "BEBIDAS")])
+
+    with (
+        patch.object(_EditTabDialog, "wait_visibility"),
+        patch.object(_EditTabDialog, "grab_set"),
+    ):
+        bar._open_edit_dialog(1, "BEBIDAS")
+        dialogs = [w for w in bar.winfo_children() if isinstance(w, _EditTabDialog)]
+        assert len(dialogs) == 1
+        dlg = dialogs[0]
+
+        try:
+            assert dlg._var.get() == "BEBIDAS"
+
+            # Blank or whitespace-only name must not close dialog or trigger rename
+            dlg._var.set("   ")
+            dlg._handle_save()
+            assert dlg.winfo_exists()
+            on_rename.assert_not_called()
+
+            # Valid name trims whitespace, closes dialog, and invokes on_rename(id, name)
+            dlg._var.set("  SUCOS  ")
+            dlg._handle_save()
+            assert not dlg.winfo_exists()
+            on_rename.assert_called_once_with(1, "SUCOS")
+        finally:
+            if dlg.winfo_exists():
+                dlg.destroy()
+
+        # Delete action closes dialog and invokes on_delete(id, current_name)
+        bar._open_edit_dialog(1, "SUCOS")
+        dlg_del = [w for w in bar.winfo_children() if isinstance(w, _EditTabDialog)][0]
+        try:
+            dlg_del._handle_delete()
+            assert not dlg_del.winfo_exists()
+            on_delete.assert_called_once_with(1, "SUCOS")
+        finally:
+            if dlg_del.winfo_exists():
+                dlg_del.destroy()

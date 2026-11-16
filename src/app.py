@@ -10,12 +10,13 @@ from views import CatalogView, EntriesView, ReportsView
 
 def get_base_dir() -> Path:
     if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parent
+        return Path(sys.executable).resolve().parent.parent
+
+    return Path(__file__).resolve().parent.parent
 
 
 def resource_path(relative_path: str) -> Path:
-    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
     return base / relative_path
 
 
@@ -47,7 +48,7 @@ class App(tk.Tk):
         self.db = db
         self.title("Lança Fácil")
         if sys.platform.startswith("win"):
-            icon = resource_path("icon.ico")
+            icon = resource_path("assets/icon.ico")
             if icon.exists():
                 self.iconbitmap(default=str(icon))
         else:

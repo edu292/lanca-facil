@@ -11,3 +11,5 @@ wheels/
 
 *.ico
 *.sqlite3
+*.png
+*.zip
